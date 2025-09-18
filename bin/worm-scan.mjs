@@ -59,24 +59,58 @@ function normalizeMalwareList(data) {
     map.get(n).add(v);
   };
 
+  const addMany = (name, arr) => {
+    if (!name || !Array.isArray(arr)) return;
+    for (const v of arr) add(name, v);
+  };
+
+  const isSemverish = (s) => typeof s === 'string' && /\d+\.\d+\.\d+/.test(s);
+
+  const considerEntry = (entry) => {
+    if (!entry || typeof entry !== 'object') return;
+    // Optional ecosystem filter
+    if ('ecosystem' in entry && String(entry.ecosystem).toLowerCase() !== 'npm') return;
+    const name = entry.name || entry.package || entry.package_name || entry.pkg || entry.module || null;
+    if (name) {
+      if (Array.isArray(entry.versions)) addMany(name, entry.versions);
+      if (Array.isArray(entry.affected_versions)) addMany(name, entry.affected_versions);
+      if (Array.isArray(entry.affected)) addMany(name, entry.affected);
+      if (typeof entry.version === 'string') add(name, entry.version);
+      if (typeof entry.affected_version === 'string') add(name, entry.affected_version);
+    }
+  };
+
+  const walkObject = (obj) => {
+    for (const [k, v] of Object.entries(obj)) {
+      if (Array.isArray(v)) {
+        // Array of versions under a package key
+        if (v.length && v.every(isSemverish)) {
+          addMany(k, v);
+          continue;
+        }
+        // Array of entries/objects
+        for (const item of v) considerEntry(item);
+      } else if (v && typeof v === 'object') {
+        // Known container keys that may hold mappings
+        if (['npm', 'packages', 'package', 'data', 'malware', 'malware_predictions'].includes(k)) {
+          walkObject(v);
+        } else {
+          // Heuristic: nested mapping name -> versions[]
+          for (const [nk, nv] of Object.entries(v)) {
+            if (Array.isArray(nv) && nv.length && nv.every(isSemverish)) addMany(nk, nv);
+          }
+        }
+      } else if (typeof v === 'string' && isSemverish(v)) {
+        // Single version string under a package key
+        add(k, v);
+      }
+    }
+  };
+
   if (Array.isArray(data)) {
-    for (const entry of data) {
-      if (!entry || typeof entry !== 'object') continue;
-      if ('name' in entry && 'version' in entry) {
-        add(entry.name, entry.version);
-      }
-      if ('name' in entry && Array.isArray(entry.versions)) {
-        for (const v of entry.versions) add(entry.name, v);
-      }
-    }
+    for (const entry of data) considerEntry(entry);
   } else if (data && typeof data === 'object') {
-    for (const [name, versions] of Object.entries(data)) {
-      if (Array.isArray(versions)) {
-        for (const v of versions) add(name, v);
-      } else if (typeof versions === 'string') {
-        add(name, versions);
-      }
-    }
+    walkObject(data);
   }
 
   return map;
@@ -228,6 +262,9 @@ function printFindings(findings, patchDistance, stats) {
   if (stats && typeof stats.totalPackages === 'number' && typeof stats.uniqueNames === 'number') {
     console.log(`Scanned ${stats.totalPackages} packages (${stats.uniqueNames} names).`);
   }
+  if (stats && typeof stats.dbNames === 'number') {
+    console.log(`DB package names: ${stats.dbNames}`);
+  }
   if (stats && stats.present instanceof Map) {
     const presentNames = Array.from(stats.present.keys()).sort();
     console.log(`DB packages present: ${presentNames.length}`);
@@ -276,7 +313,7 @@ async function main() {
       }
     }
 
-    const stats = { totalPackages, uniqueNames, present };
+    const stats = { totalPackages, uniqueNames, present, dbNames: malwareMap.size };
     const { criticals } = printFindings(findings, patchDistance, stats);
     process.exit(criticals > 0 ? 2 : 0);
   } catch (err) {
@@ -285,18 +322,9 @@ async function main() {
   }
 }
 
-// Only run if invoked directly (not imported)
-const isDirect = (() => {
-  try {
-    const entry = process.argv[1];
-    const me = fileURLToPath(import.meta.url);
-    return entry && basename(entry) === basename(me);
-  } catch { return true; }
-})();
-
-if (isDirect) {
-  main();
-}
+// Run the CLI unconditionally. When installed via npm bin shim, this module
+// is imported rather than executed directly; we still want main() to run.
+main();
 
 export {
   // Export internals for potential future extension
