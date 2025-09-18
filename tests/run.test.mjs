@@ -31,6 +31,9 @@ test('Critical hit', async () => {
   assert.equal(code, 2, 'exit code should be 2 for criticals');
   assert.match(stdout, /CRITICAL.*evil@1\.2\.3/i);
   assert.match(stdout, /Summary: 1 critical, 0 warnings/);
+  assert.match(stdout, /Scanned \d+ packages \(\d+ names\)\./);
+  assert.match(stdout, /DB packages present: 1/);
+  assert.match(stdout, /INFO evil installed 1\.2\.3; affected: 1\.2\.3/);
 });
 
 test('Warning below', async () => {
@@ -41,6 +44,9 @@ test('Warning below', async () => {
   const { code, stdout } = await runScan(env);
   assert.equal(code, 0, 'exit code should be 0 for warnings only');
   assert.match(stdout, /WARNING.*pkg@2\.5\.6.*2\.5\.7/);
+  assert.match(stdout, /Scanned \d+ packages \(\d+ names\)\./);
+  assert.match(stdout, /DB packages present: 1/);
+  assert.match(stdout, /INFO pkg installed 2\.5\.6; affected: 2\.5\.7/);
 });
 
 test('Warning above', async () => {
@@ -51,6 +57,9 @@ test('Warning above', async () => {
   const { code, stdout } = await runScan(env);
   assert.equal(code, 0);
   assert.match(stdout, /WARNING.*pkg@2\.5\.8.*2\.5\.7/);
+  assert.match(stdout, /Scanned \d+ packages \(\d+ names\)\./);
+  assert.match(stdout, /DB packages present: 1/);
+  assert.match(stdout, /INFO pkg installed 2\.5\.8; affected: 2\.5\.7/);
 });
 
 test('Clean project', async () => {
@@ -61,6 +70,8 @@ test('Clean project', async () => {
   const { code, stdout } = await runScan(env);
   assert.equal(code, 0);
   assert.match(stdout, /No critical or adjacent versions found\./);
+  assert.match(stdout, /Scanned \d+ packages \(\d+ names\)\./);
+  assert.match(stdout, /DB packages present: 0/);
 });
 
 test('npm ls noisy but parseable (via JSON override)', async () => {
@@ -71,6 +82,7 @@ test('npm ls noisy but parseable (via JSON override)', async () => {
   const { code, stdout } = await runScan(env);
   assert.equal(code, 2);
   assert.match(stdout, /CRITICAL/);
+  assert.match(stdout, /DB packages present: 1/);
 });
 
 test('Network failure', async () => {
@@ -95,6 +107,8 @@ test('Schema quirks normalize identically', async (t) => {
       const { code, stdout } = await runScan(env);
       assert.equal(code, 2);
       assert.match(stdout, /CRITICAL.*abc@1\.0\.0/);
+      assert.match(stdout, /DB packages present: 1/);
+      assert.match(stdout, /INFO abc installed 1\.0\.0; affected: 1\.0\.0/);
     });
   }
 });

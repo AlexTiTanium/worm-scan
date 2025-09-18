@@ -206,7 +206,7 @@ function scan(installed, malwareMap, patchDistance = 1) {
   return findings;
 }
 
-function printFindings(findings, patchDistance) {
+function printFindings(findings, patchDistance, stats) {
   let criticals = 0;
   let warnings = 0;
   for (const f of findings) {
@@ -225,6 +225,23 @@ function printFindings(findings, patchDistance) {
     const colored = criticals > 0 ? colors.red(summary) : colors.yellow(summary);
     console.log(colored);
   }
+  if (stats && typeof stats.totalPackages === 'number' && typeof stats.uniqueNames === 'number') {
+    console.log(`Scanned ${stats.totalPackages} packages (${stats.uniqueNames} names).`);
+  }
+  if (stats && stats.present instanceof Map) {
+    const presentNames = Array.from(stats.present.keys()).sort();
+    console.log(`DB packages present: ${presentNames.length}`);
+    for (const name of presentNames) {
+      const info = stats.present.get(name);
+      const installed = Array.from(info.installed);
+      installed.sort(cmpVer);
+      const affected = Array.from(info.affected);
+      affected.sort(cmpVer);
+      const installedStr = installed.join(', ');
+      const affectedStr = affected.slice(0, 5).join(', ') + (affected.length > 5 ? ', …' : '');
+      console.log(`INFO ${name} installed ${installedStr}; affected: ${affectedStr}`);
+    }
+  }
   return { criticals, warnings };
 }
 
@@ -237,14 +254,30 @@ async function main() {
   })();
 
   try {
+    console.error('worm-scan: Fetching malware data...');
     const [malwareRaw, tree] = await Promise.all([
       fetchMalwareList(),
-      readNpmTree(),
+      (async () => { console.error('worm-scan: Reading npm tree...'); return readNpmTree(); })(),
     ]);
     const malwareMap = normalizeMalwareList(malwareRaw);
     const installed = flattenPackages(tree);
+    const totalPackages = installed.length;
+    const uniqueNames = new Set(installed.map(p => p.name)).size;
+    console.error(`worm-scan: Scanning ${totalPackages} packages (${uniqueNames} names)...`);
+
     const findings = scan(installed, malwareMap, patchDistance);
-    const { criticals } = printFindings(findings, patchDistance);
+
+    // Compute intersection between installed names and malware DB
+    const present = new Map(); // name -> { installed:Set, affected:Set }
+    for (const { name, version } of installed) {
+      if (malwareMap.has(name)) {
+        if (!present.has(name)) present.set(name, { installed: new Set(), affected: new Set(malwareMap.get(name)) });
+        present.get(name).installed.add(version);
+      }
+    }
+
+    const stats = { totalPackages, uniqueNames, present };
+    const { criticals } = printFindings(findings, patchDistance, stats);
     process.exit(criticals > 0 ? 2 : 0);
   } catch (err) {
     console.error(colors.red(`Error: ${err.message}`));
