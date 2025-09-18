@@ -1,0 +1,20 @@
+{
+  "name": "worm-scan",
+  "version": "0.1.0",
+  "description": "Scan installed npm packages against a malware list and flag critical and adjacent versions.",
+  "bin": {
+    "worm-scan": "bin/worm-scan.mjs"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {},
+  "devDependencies": {},
+  "scripts": {
+    "test": "node --test"
+  }
+}
+

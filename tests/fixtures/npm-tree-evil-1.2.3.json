@@ -1,0 +1,11 @@
+{
+  "name": "root",
+  "version": "0.0.0",
+  "dependencies": {
+    "evil": {
+      "version": "1.2.3",
+      "dependencies": {}
+    }
+  }
+}
+
